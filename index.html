@@ -1,0 +1,349 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer Purchase Decision Analysis</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #f1f5f9;
+  color: #172b4d;
+  font-family: Arial, sans-serif;
+}
+header {
+  background: #142a4d;
+  color: white;
+  padding: 25px;
+  text-align: center;
+}
+main {
+  max-width: 1000px;
+  margin: 25px auto;
+  padding: 0 16px;
+}
+.card {
+  background: white;
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 3px 12px #00000010;
+}
+label {
+  display: block;
+  margin: 15px 0 6px;
+  font-weight: bold;
+}
+input, select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+input[type=range] {
+  accent-color: #2563eb;
+}
+button {
+  background: #2563eb;
+  color: white;
+  border: 0;
+  border-radius: 8px;
+  padding: 12px 18px;
+  cursor: pointer;
+  margin: 8px 8px 0 0;
+}
+button:hover { background: #1d4ed8; }
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+.stat {
+  background: #eff6ff;
+  padding: 18px;
+  border-radius: 10px;
+}
+.stat strong {
+  display: block;
+  font-size: 28px;
+  margin-top: 8px;
+}
+.bar {
+  background: #e2e8f0;
+  height: 18px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.fill {
+  background: #2563eb;
+  height: 100%;
+}
+.factor { margin: 18px 0; }
+.result {
+  background: #ecfdf5;
+  padding: 16px;
+  border-radius: 10px;
+  margin-top: 15px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Customer Insight Dashboard</h1>
+  <p>ระบบวิเคราะห์ความต้องการของลูกค้า
+     ต่อการเลือกซื้อสินค้า</p>
+</header>
+
+<main>
+  <section class="card">
+    <div class="stats">
+      <div class="stat">
+        จำนวนผู้ตอบ
+        <strong id="count">0</strong>
+      </div>
+      <div class="stat">
+        คะแนนเฉลี่ยล่าสุด
+        <strong id="average">0</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>แบบสอบถามความต้องการลูกค้า</h2>
+
+    <form id="survey">
+      <label>ประเภทสินค้า</label>
+      <select id="category">
+        <option>อุปกรณ์อิเล็กทรอนิกส์</option>
+        <option>เสื้อผ้าและแฟชั่น</option>
+        <option>อาหารและเครื่องดื่ม</option>
+        <option>เครื่องสำอาง</option>
+        <option>สินค้าเพื่อสุขภาพ</option>
+      </select>
+
+      <label>งบประมาณ (บาท)</label>
+      <input id="budget" type="number"
+             min="0" value="5000" required>
+
+      <h3>ให้คะแนนความสำคัญ 1–5</h3>
+      <div id="questions"></div>
+
+      <button type="submit">
+        บันทึกและวิเคราะห์ผล
+      </button>
+    </form>
+    <div id="result"></div>
+  </section>
+
+  <section class="card">
+    <h2>Dashboard วิเคราะห์ปัจจัย</h2>
+    <div id="chart"></div>
+    <button onclick="exportCSV()">
+      Export CSV
+    </button>
+    <button onclick="clearData()">
+      ล้างข้อมูลทั้งหมด
+    </button>
+  </section>
+</main>
+
+<script>
+const factors = [
+  "ราคา",
+  "คุณภาพ",
+  "ความน่าเชื่อถือของแบรนด์",
+  "รีวิวจากผู้ซื้อ",
+  "โปรโมชั่น"
+];
+
+const key = "customerSurveyV1";
+let records = [];
+
+try {
+  const saved = JSON.parse(localStorage.getItem(key));
+  records = Array.isArray(saved) ? saved : [];
+} catch {
+  records = [];
+}
+
+const questions = document.getElementById("questions");
+
+factors.forEach((factor, i) => {
+  const div = document.createElement("div");
+  div.className = "factor";
+
+  const label = document.createElement("label");
+  label.textContent = factor;
+
+  const range = document.createElement("input");
+  range.type = "range";
+  range.min = "1";
+  range.max = "5";
+  range.value = "3";
+  range.id = "factor" + i;
+
+  const value = document.createElement("span");
+  value.textContent = "3 / 5";
+
+  range.addEventListener("input", () => {
+    value.textContent = range.value + " / 5";
+  });
+
+  div.append(label, range, value);
+  questions.appendChild(div);
+});
+
+document.getElementById("survey")
+  .addEventListener("submit", event => {
+    event.preventDefault();
+
+    const scores = factors.map((_, i) =>
+      Number(document.getElementById("factor" + i).value)
+    );
+
+    const budget = Number(
+      document.getElementById("budget").value
+    );
+
+    if (!Number.isFinite(budget) || budget < 0) {
+      alert("กรุณาระบุงบประมาณที่ถูกต้อง");
+      return;
+    }
+
+    const record = {
+      date: new Date().toISOString(),
+      category: document.getElementById("category").value,
+      budget,
+      scores
+    };
+
+    records.push(record);
+    localStorage.setItem(key, JSON.stringify(records));
+
+    const avg = scores.reduce((a, b) => a + b, 0)
+      / scores.length;
+    const highest = Math.max(...scores);
+    const important = factors.filter(
+      (_, i) => scores[i] === highest
+    );
+
+    const result = document.getElementById("result");
+    result.replaceChildren();
+
+    const box = document.createElement("div");
+    box.className = "result";
+
+    const heading = document.createElement("h3");
+    heading.textContent = "ผลการวิเคราะห์";
+
+    const top = document.createElement("p");
+    top.textContent =
+      "ปัจจัยที่สำคัญที่สุด: " + important.join(", ");
+
+    const mean = document.createElement("p");
+    mean.textContent =
+      "คะแนนเฉลี่ย: " + avg.toFixed(2) + " / 5";
+
+    box.append(heading, top, mean);
+    result.appendChild(box);
+
+    renderDashboard();
+  });
+
+function renderDashboard() {
+  document.getElementById("count").textContent =
+    records.length;
+
+  const chart = document.getElementById("chart");
+  chart.replaceChildren();
+
+  if (!records.length) {
+    document.getElementById("average").textContent = "0";
+    chart.textContent = "ยังไม่มีข้อมูล";
+    return;
+  }
+
+  const latest = records[records.length - 1];
+  const latestAvg = latest.scores.reduce(
+    (a, b) => a + b, 0
+  ) / factors.length;
+
+  document.getElementById("average").textContent =
+    latestAvg.toFixed(2);
+
+  const means = factors.map((_, i) =>
+    records.reduce((sum, record) =>
+      sum + record.scores[i], 0
+    ) / records.length
+  );
+
+  means.forEach((score, i) => {
+    const section = document.createElement("div");
+    section.className = "factor";
+
+    const title = document.createElement("p");
+    title.textContent =
+      factors[i] + ": " + score.toFixed(2) + " / 5";
+
+    const bar = document.createElement("div");
+    bar.className = "bar";
+
+    const fill = document.createElement("div");
+    fill.className = "fill";
+    fill.style.width = (score / 5 * 100) + "%";
+
+    bar.appendChild(fill);
+    section.append(title, bar);
+    chart.appendChild(section);
+  });
+}
+
+function exportCSV() {
+  if (!records.length) {
+    alert("ยังไม่มีข้อมูลสำหรับส่งออก");
+    return;
+  }
+
+  const rows = [
+    ["Date", "Category", "Budget", ...factors],
+    ...records.map(r => [
+      r.date, r.category, r.budget, ...r.scores
+    ])
+  ];
+
+  const csv = "\uFEFF" + rows.map(row =>
+    row.map(value =>
+      '"' + String(value).replace(/"/g, '""') + '"'
+    ).join(",")
+  ).join("\r\n");
+
+  const blob = new Blob([csv], {
+    type: "text/csv;charset=utf-8"
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "customer_survey.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function clearData() {
+  if (!confirm("ต้องการล้างข้อมูลทั้งหมดหรือไม่?")) {
+    return;
+  }
+
+  records = [];
+  localStorage.removeItem(key);
+  document.getElementById("result").replaceChildren();
+  renderDashboard();
+}
+
+renderDashboard();
+</script>
+</body>
+</html>
